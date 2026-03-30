@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>תחזית מזג אוויר – ישראל</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f5f5f5;min-height:100vh;direction:rtl;padding:20px}
+.wrap{max-width:860px;margin:0 auto}
+h1{font-size:1.5rem;font-weight:600;margin-bottom:4px}
+p.sub{font-size:13px;color:#666;margin-bottom:20px}
+.sbox{background:#fff;border-radius:12px;border:1px solid #e0e0e0;padding:18px;margin-bottom:20px}
+.srow{display:flex;gap:8px;flex-wrap:wrap}
+.dwrap{position:relative;flex:1;min-width:180px}
+input{width:100%;padding:8px 12px;font-size:14px;border-radius:8px;border:1px solid #ccc;outline:none;font-family:inherit}
+input:focus{border-color:#333}
+.dd{display:none;position:absolute;top:calc(100% + 4px);right:0;left:0;background:#fff;border:1px solid #ccc;border-radius:8px;max-height:200px;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.dd div{padding:8px 12px;cursor:pointer;font-size:14px}
+.dd div:hover{background:#f0f0f0}
+button{padding:8px 20px;font-size:14px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer;font-family:inherit;white-space:nowrap}
+button:hover{background:#f0f0f0}
+button:disabled{opacity:.5;cursor:not-allowed}
+.badge{display:none;margin-top:8px;font-size:13px;color:#555}
+.badge span{font-weight:600;color:#111}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+.card{background:#fff;border-radius:10px;border:1px solid #e0e0e0;padding:14px}
+.card .label{font-size:11px;color:#888;margin-bottom:5px}
+.card .val{font-size:22px;font-weight:600}
+.card .sub2{font-size:11px;color:#888;margin-top:4px}
+.stitle{font-size:11px;color:#888;letter-spacing:.05em;margin-bottom:10px}
+.timeline{overflow-x:auto;padding-bottom:8px}
+.tscroll{display:flex;gap:8px;min-width:max-content}
+.hcard{width:68px;text-align:center;background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:8px 4px;flex-shrink:0}
+.hcard.now{border-color:#333;background:#fafafa}
+.hcard .ht{font-size:11px;color:#888}
+.hcard .hd{font-size:10px;color:#aaa;margin-bottom:4px}
+.hcard .hi{font-size:18px;line-height:1.2;margin-bottom:2px}
+.hcard .htemp{font-size:13px;font-weight:600;margin-bottom:2px}
+.hcard .hrain{font-size:11px;color:#5599cc;margin-bottom:4px}
+.rbar{height:3px;background:#eee;border-radius:2px}
+.rbf{height:3px;border-radius:2px;background:#5599cc}
+.err{color:#c00;font-size:14px;padding:10px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>תחזית מזג אוויר – ישראל</h1>
+  <p class="sub">בחרו ישוב וקבלו תחזית שעתית עד מחר 18:00</p>
+  <div class="sbox">
+    <div class="srow">
+      <div class="dwrap">
+        <input type="text" id="ci" placeholder="הקלידו שם ישוב..." autocomplete="off">
+        <div class="dd" id="dd"></div>
+      </div>
+      <button id="btn" onclick="doFetch()">הצג תחזית</button>
+    </div>
+    <div class="badge" id="badge">נבחר: <span id="bn"></span></div>
+  </div>
+  <div id="out"></div>
+</div>
+<script>
+const CITIES=[
+  {n:"אילת",lat:29.56,zone:"desert"},{n:"באר שבע",lat:31.25,zone:"semi-arid"},
+  {n:"ירושלים",lat:31.77,zone:"mountain"},{n:"תל אביב",lat:32.09,zone:"coast"},
+  {n:"חיפה",lat:32.79,zone:"coast"},{n:"נתניה",lat:32.33,zone:"coast"},
+  {n:"ראשון לציון",lat:31.96,zone:"coast"},{n:"פתח תקווה",lat:32.09,zone:"inland"},
+  {n:"אשדוד",lat:31.80,zone:"coast"},{n:"אשקלון",lat:31.67,zone:"coast"},
+  {n:"רחובות",lat:31.90,zone:"inland"},{n:"בת ים",lat:32.02,zone:"coast"},
+  {n:"בני ברק",lat:32.08,zone:"inland"},{n:"רמת גן",lat:32.08,zone:"inland"},
+  {n:"הרצליה",lat:32.17,zone:"coast"},{n:"כפר סבא",lat:32.18,zone:"inland"},
+  {n:"רעננה",lat:32.18,zone:"inland"},{n:"חולון",lat:32.01,zone:"inland"},
+  {n:"נס ציונה",lat:31.93,zone:"inland"},{n:"לוד",lat:31.95,zone:"inland"},
+  {n:"רמלה",lat:31.93,zone:"inland"},{n:"מודיעין",lat:31.90,zone:"inland"},
+  {n:"הוד השרון",lat:32.15,zone:"inland"},{n:"רמת השרון",lat:32.15,zone:"coast"},
+  {n:"נהריה",lat:33.01,zone:"coast"},{n:"עכו",lat:32.92,zone:"coast"},
+  {n:"כרמיאל",lat:32.92,zone:"galilee"},{n:"צפת",lat:32.96,zone:"mountain"},
+  {n:"טבריה",lat:32.79,zone:"jordan"},{n:"נצרת",lat:32.70,zone:"galilee"},
+  {n:"עפולה",lat:32.61,zone:"valley"},{n:"בית שאן",lat:32.50,zone:"jordan"},
+  {n:"חדרה",lat:32.43,zone:"coast"},{n:"קריית שמונה",lat:33.21,zone:"galilee"},
+  {n:"דימונה",lat:31.07,zone:"desert"},{n:"ערד",lat:31.26,zone:"desert"},
+  {n:"מצפה רמון",lat:30.61,zone:"desert"},{n:"ירוחם",lat:30.99,zone:"desert"},
+  {n:"קריית גת",lat:31.61,zone:"semi-arid"},{n:"נתיבות",lat:31.42,zone:"semi-arid"},
+  {n:"שדרות",lat:31.52,zone:"semi-arid"},{n:"אופקים",lat:31.31,zone:"semi-arid"},
+  {n:"יבנה",lat:31.88,zone:"coast"},{n:"גבעתיים",lat:32.07,zone:"inland"},
+  {n:"בית שמש",lat:31.75,zone:"mountain"},{n:"מעלה אדומים",lat:31.77,zone:"desert"},
+  {n:"ראש העין",lat:32.10,zone:"inland"},{n:"אלעד",lat:32.05,zone:"inland"},
+  {n:"זכרון יעקב",lat:32.58,zone:"coast"},{n:"פרדס חנה",lat:32.47,zone:"inland"},
+  {n:"מגדל העמק",lat:32.68,zone:"valley"},{n:"אבו גוש",lat:31.81,zone:"mountain"},
+  {n:"טייבה",lat:32.27,zone:"inland"},{n:"אום אל פחם",lat:32.52,zone:"galilee"},
+  {n:"חצור הגלילית",lat:33.02,zone:"galilee"},{n:"ביתר עילית",lat:31.69,zone:"mountain"},
+  {n:"מודיעין עילית",lat:31.93,zone:"mountain"},{n:"אריאל",lat:32.10,zone:"inland"},
+  {n:"קריית אונו",lat:32.06,zone:"inland"},{n:"גבעת שמואל",lat:32.08,zone:"inland"}
+];
+let sel=null;
+const ci=document.getElementById('ci'),dd=document.getElementById('dd');
+ci.addEventListener('input',()=>{
+  const q=ci.value.trim();
+  if(!q){dd.style.display='none';return;}
+  const m=CITIES.filter(c=>c.n.includes(q)).slice(0,10);
+  if(!m.length){dd.style.display='none';return;}
+  dd.innerHTML='';
+  m.forEach(c=>{
+    const d=document.createElement('div');
+    d.textContent=c.n;
+    d.onclick=()=>{sel=c;ci.value=c.n;dd.style.display='none';document.getElementById('bn').textContent=c.n;document.getElementById('badge').style.display='block';};
+    dd.appendChild(d);
+  });
+  dd.style.display='block';
+});
+document.addEventListener('click',e=>{if(!e.target.closest('#ci')&&!e.target.closest('#dd'))dd.style.display='none';});
+
+function genForecast(city,slots){
+  const now=new Date(),month=now.getMonth(),zone=city.zone;
+  const baseDayTemp={coast:[17,18,20,24,27,30,31,31,30,27,23,18],inland:[15,16,19,23,27,30,32,32,30,26,21,16],mountain:[10,11,13,18,22,25,26,26,24,20,15,11],desert:[18,20,23,28,33,37,39,38,36,31,24,19],"semi-arid":[16,17,20,25,29,33,35,35,32,28,22,17],galilee:[11,12,15,19,24,27,29,29,27,22,16,12],valley:[13,14,17,22,27,31,33,33,30,25,18,13],jordan:[15,17,20,26,31,35,37,37,34,29,21,16]};
+  const rainProb={coast:[55,50,40,20,5,0,0,0,5,20,45,55],inland:[50,45,35,15,5,0,0,0,5,15,40,50],mountain:[65,60,50,25,8,0,0,0,5,25,55,65],desert:[15,10,8,5,2,0,0,0,2,5,10,12],"semi-arid":[35,30,20,10,3,0,0,0,3,10,25,35],galilee:[60,55,45,20,6,0,0,0,5,22,50,60],valley:[45,40,30,12,4,0,0,0,4,12,35,45],jordan:[25,20,15,8,2,0,0,0,2,8,18,22]};
+  const dayT=(baseDayTemp[zone]||baseDayTemp.inland)[month];
+  const nightT=dayT-8-(zone==='desert'?4:0)-(zone==='mountain'?3:0);
+  const baseRain=(rainProb[zone]||rainProb.inland)[month];
+  const seed=(now.getDate()*7+now.getMonth()*13)%100;
+  const rainToday=Math.max(0,Math.min(100,baseRain+(seed%30)-15));
+  const rainTom=Math.max(0,Math.min(100,baseRain+((seed+17)%30)-15));
+  const baseWind=[20,22,25,18,15,10,8,8,12,18,22,20][month];
+  const todayStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  return slots.map(slot=>{
+    const h=parseInt(slot.split('T')[1]);
+    const isToday=slot.startsWith(todayStr);
+    const rb=isToday?rainToday:rainTom;
+    const tCurve=Math.sin((h-5)/24*2*Math.PI-Math.PI/2);
+    const temp=Math.round((nightT+dayT)/2+(dayT-nightT)/2*tCurve);
+    let hr=rb;
+    if(month>=10||month<=2){hr=h<8||h>20?Math.min(100,rb*1.3):rb*0.8;}
+    hr=Math.round(Math.max(0,Math.min(100,hr)));
+    let code=hr>70?63:hr>50?61:hr>30?80:hr>15?2:hr>5?1:0;
+    const wind=Math.round(baseWind*(0.7+0.6*Math.sin((h-6)/24*2*Math.PI)));
+    return{temp,rain:hr,code,wind};
+  });
+}
+function icon(w,dh){if(w===0)return dh?'☀️':'🌙';if(w<=2)return dh?'⛅':'🌤️';if(w<=3)return'☁️';if(w<=61)return'🌦️';if(w<=65)return'🌧️';if(w<=80)return'🌦️';return'⛈️';}
+function wlabel(w){if(w===0)return'שמיים בהירים';if(w<=1)return'בהיר בעיקר';if(w<=2)return'מעונן חלקית';if(w<=3)return'מעונן';if(w<=61)return'גשם קל';if(w<=65)return'גשם';if(w<=80)return'ממטרים';return'סופת רעמים';}
+function tcolor(t){if(t<10)return'#2277cc';if(t<18)return'#1a9966';if(t<26)return'#558800';if(t<32)return'#cc8800';return'#cc4400';}
+function isDH(h){return h>=6&&h<20;}
+function getRec(r,mx,mn,w){
+  if(r>70)return{t:'לא מומלץ לצאת לטבע',c:'#c00',d:'צפי לגשם כבד'};
+  if(r>40)return{t:'יציאה לטבע – עם אזהרה',c:'#b36000',d:'סיכוי לגשם, הכינו ציוד'};
+  if(mx>38)return{t:'חום קיצוני – לא מומלץ',c:'#c00',d:'מסוכן לפעילות חיצונית'};
+  if(mx>34)return{t:'חם מאוד – יזהרו',c:'#b36000',d:'שתו הרבה מים'};
+  if(mn<3)return{t:'קר מאוד – לבשו שכבות',c:'#b36000',d:'טמפרטורות נמוכות מאוד'};
+  if(w>50)return{t:'רוחות חזקות',c:'#b36000',d:'רוחות עלולות להיות מסוכנות'};
+  if(r<15&&mx<33&&mx>8)return{t:'מומלץ לצאת לטבע!',c:'#197a3e',d:'מזג אוויר נוח לטיול'};
+  return{t:'בדרך כלל נוח',c:'#555',d:'בדקו את התחזית השעתית'};
+}
+function doFetch(){
+  if(!sel){const m=CITIES.find(c=>c.n===ci.value.trim());if(m){sel=m;document.getElementById('bn').textContent=m.n;document.getElementById('badge').style.display='block';}else{document.getElementById('out').innerHTML='<p class="err">נא לבחור ישוב מהרשימה</p>';return;}}
+  const now=new Date(),pad=n=>String(n).padStart(2,'0'),fmt=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const tom=new Date(now);tom.setDate(tom.getDate()+1);
+  const nowStr=`${fmt(now)}T${pad(now.getHours())}:00`,tomStr=`${fmt(tom)}T18:00`;
+  const slots=[],cur=new Date(now);cur.setMinutes(0,0,0);
+  while(true){const s=`${fmt(cur)}T${pad(cur.getHours())}:00`;if(s>tomStr)break;if(s>=nowStr)slots.push(s);cur.setHours(cur.getHours()+1);}
+  const data=genForecast(sel,slots);
+  const temps=data.map(d=>d.temp),rains=data.map(d=>d.rain),winds=data.map(d=>d.wind);
+  const maxT=Math.max(...temps),minT=Math.min(...temps),maxR=Math.max(...rains),maxW=Math.max(...winds);
+  const rec=getRec(maxR,maxT,minT,maxW),firstDate=slots[0].split('T')[0];
+  let html=`<div class="grid">
+    <div class="card"><div class="label">${icon(data[0].code,isDH(parseInt(slots[0].split('T')[1])))} כעת ב${sel.n}</div><div class="val" style="color:${tcolor(data[0].temp)}">${data[0].temp}°C</div><div class="sub2">${wlabel(data[0].code)}</div></div>
+    <div class="card"><div class="label">טווח טמפרטורות</div><div class="val">${minT}°–${maxT}°</div><div class="sub2">מינימום – מקסימום</div></div>
+    <div class="card"><div class="label">סיכוי גשם</div><div class="val">${maxR}%</div><div class="sub2">רוח עד ${maxW} קמ"ש</div></div>
+    <div class="card"><div class="label">המלצה לטיול</div><div class="val" style="font-size:14px;color:${rec.c}">${rec.t}</div><div class="sub2">${rec.d}</div></div>
+  </div>
+  <p class="stitle">תחזית שעתית – מעכשיו עד מחר 18:00</p>
+  <div class="timeline"><div class="tscroll">`;
+  slots.forEach((s,i)=>{
+    const hStr=s.split('T')[1].slice(0,5),dStr=s.split('T')[0],h=parseInt(s.split('T')[1]),dl=dStr===firstDate?'היום':'מחר';
+    html+=`<div class="hcard${i===0?' now':''}"><div class="ht">${hStr}</div><div class="hd">${dl}</div><div class="hi">${icon(data[i].code,isDH(h))}</div><div class="htemp" style="color:${tcolor(data[i].temp)}">${data[i].temp}°</div><div class="hrain">💧${data[i].rain}%</div><div class="rbar"><div class="rbf" style="width:${data[i].rain}%"></div></div></div>`;
+  });
+  html+=`</div></div>`;
+  document.getElementById('out').innerHTML=html;
+}
+</script>
+</body>
+</html>
