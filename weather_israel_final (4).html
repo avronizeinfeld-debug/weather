@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>תחזית מזג אוויר – ישראל</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f5f5f5;min-height:100vh;direction:rtl;padding:20px}
+.wrap{max-width:860px;margin:0 auto}
+h1{font-size:1.5rem;font-weight:600;margin-bottom:4px}
+p.sub{font-size:13px;color:#666;margin-bottom:20px}
+.sbox{background:#fff;border-radius:12px;border:1px solid #e0e0e0;padding:18px;margin-bottom:20px}
+.srow{display:flex;gap:8px;flex-wrap:wrap}
+.dwrap{position:relative;flex:1;min-width:180px}
+input{width:100%;padding:8px 12px;font-size:14px;border-radius:8px;border:1px solid #ccc;outline:none;font-family:inherit}
+input:focus{border-color:#333}
+.dd{display:none;position:absolute;top:calc(100% + 4px);right:0;left:0;background:#fff;border:1px solid #ccc;border-radius:8px;max-height:200px;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.dd div{padding:8px 12px;cursor:pointer;font-size:14px}
+.dd div:hover{background:#f0f0f0}
+button{padding:8px 20px;font-size:14px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer;font-family:inherit;white-space:nowrap}
+button:hover{background:#f0f0f0}
+button:disabled{opacity:.5;cursor:not-allowed}
+.badge{display:none;margin-top:8px;font-size:13px;color:#555}
+.badge span{font-weight:600;color:#111}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+.card{background:#fff;border-radius:10px;border:1px solid #e0e0e0;padding:14px}
+.card .label{font-size:11px;color:#888;margin-bottom:5px}
+.card .val{font-size:22px;font-weight:600}
+.card .sub2{font-size:11px;color:#888;margin-top:4px}
+.stitle{font-size:11px;color:#888;letter-spacing:.05em;margin-bottom:10px}
+.timeline{overflow-x:auto;padding-bottom:8px}
+.tscroll{display:flex;gap:8px;min-width:max-content}
+.hcard{width:68px;text-align:center;background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:8px 4px;flex-shrink:0}
+.hcard.now{border-color:#333;background:#fafafa}
+.hcard .ht{font-size:11px;color:#888}
+.hcard .hd{font-size:10px;color:#aaa;margin-bottom:4px}
+.hcard .hi{font-size:18px;line-height:1.2;margin-bottom:2px}
+.hcard .htemp{font-size:13px;font-weight:600;margin-bottom:2px}
+.hcard .hrain{font-size:11px;color:#5599cc;margin-bottom:4px}
+.rbar{height:3px;background:#eee;border-radius:2px}
+.rbf{height:3px;border-radius:2px;background:#5599cc}
+.err{color:#c00;font-size:14px;padding:10px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>תחזית מזג אוויר – ישראל</h1>
+  <p class="sub">בחרו ישוב וקבלו תחזית שעתית עד מחר 18:00</p>
+  <div class="sbox">
+    <div class="srow">
+      <div class="dwrap">
+        <input type="text" id="ci" placeholder="הקלידו שם ישוב..." autocomplete="off">
+        <div class="dd" id="dd"></div>
+      </div>
+      <button id="btn" onclick="doFetch()">הצג תחזית</button>
+    </div>
+    <div class="badge" id="badge">נבחר: <span id="bn"></span></div>
+  </div>
+  <div id="out"></div>
+</div>
+<script>
+const CITIES=[
+  // גליל עליון
+  {n:"אודם",lat:33.258,lon:35.772,zone:"galilee"},{n:"נווה אטיב",lat:33.244,lon:35.810,zone:"galilee"},
+  {n:"מסעדה",lat:33.248,lon:35.773,zone:"galilee"},{n:"בוקעתא",lat:33.244,lon:35.762,zone:"galilee"},
+  {n:"מג׳דל שמס",lat:33.270,lon:35.765,zone:"galilee"},{n:"עין קינייה",lat:33.260,lon:35.752,zone:"galilee"},
+  {n:"קצרין",lat:32.995,lon:35.690,zone:"galilee"},{n:"אלוני הבשן",lat:33.050,lon:35.730,zone:"galilee"},
+  {n:"חספין",lat:32.976,lon:35.727,zone:"galilee"},{n:"נווה אור",lat:32.900,lon:35.640,zone:"galilee"},
+  {n:"קשת",lat:33.028,lon:35.762,zone:"galilee"},{n:"אל רום",lat:33.115,lon:35.768,zone:"galilee"},
+  {n:"יונתן",lat:33.052,lon:35.752,zone:"galilee"},{n:"מרום גולן",lat:33.133,lon:35.775,zone:"galilee"},
+  {n:"נווה אטיב",lat:33.244,lon:35.810,zone:"galilee"},{n:"שעל",lat:33.065,lon:35.733,zone:"galilee"},
+  {n:"קלע",lat:33.058,lon:35.718,zone:"galilee"},{n:"אניעם",lat:33.028,lon:35.730,zone:"galilee"},
+  {n:"גשור",lat:32.963,lon:35.720,zone:"galilee"},
+  // גליל עליון - ישובים
+  {n:"קריית שמונה",lat:33.207,lon:35.570,zone:"galilee"},{n:"מטולה",lat:33.270,lon:35.578,zone:"galilee"},
+  {n:"כפר גלעדי",lat:33.245,lon:35.570,zone:"galilee"},{n:"דן",lat:33.247,lon:35.651,zone:"galilee"},
+  {n:"שניר",lat:33.238,lon:35.627,zone:"galilee"},{n:"אבל בית מעכה",lat:33.259,lon:35.547,zone:"galilee"},
+  {n:"מנרה",lat:33.265,lon:35.563,zone:"galilee"},{n:"שמיר",lat:33.216,lon:35.598,zone:"galilee"},
+  {n:"כפר בלום",lat:33.173,lon:35.610,zone:"galilee"},{n:"אייל",lat:33.220,lon:35.620,zone:"galilee"},
+  {n:"יפתח",lat:33.099,lon:35.545,zone:"galilee"},{n:"חורפיש",lat:33.022,lon:35.350,zone:"galilee"},
+  {n:"פקיעין",lat:32.977,lon:35.323,zone:"galilee"},{n:"מעלות תרשיחא",lat:33.014,lon:35.273,zone:"galilee"},
+  {n:"שלומי",lat:33.069,lon:35.154,zone:"coast"},{n:"אילון",lat:33.059,lon:35.197,zone:"galilee"},
+  {n:"כברי",lat:33.010,lon:35.106,zone:"coast"},{n:"יחיעם",lat:32.991,lon:35.215,zone:"galilee"},
+  {n:"גורן",lat:33.013,lon:35.271,zone:"galilee"},{n:"ראמה",lat:32.933,lon:35.361,zone:"galilee"},
+  {n:"דיר אל-אסד",lat:32.934,lon:35.340,zone:"galilee"},{n:"ביר אל-מכסור",lat:32.885,lon:35.320,zone:"galilee"},
+  {n:"מגאר",lat:32.888,lon:35.403,zone:"galilee"},{n:"עספיא",lat:32.726,lon:35.062,zone:"coast"},
+  {n:"דלית אל-כרמל",lat:32.711,lon:35.060,zone:"coast"},
+  // גליל תחתון ועמק יזרעאל
+  {n:"נוף הגליל",lat:32.704,lon:35.318,zone:"galilee"},{n:"שפרעם",lat:32.807,lon:35.166,zone:"galilee"},
+  {n:"יוקנעם",lat:32.661,lon:35.110,zone:"valley"},{n:"מגדל העמק",lat:32.680,lon:35.239,zone:"valley"},
+  {n:"עפולה",lat:32.608,lon:35.290,zone:"valley"},{n:"בית שאן",lat:32.497,lon:35.499,zone:"jordan"},
+  {n:"נהלל",lat:32.676,lon:35.201,zone:"valley"},{n:"כפר יהושע",lat:32.676,lon:35.161,zone:"valley"},
+  {n:"גבת",lat:32.678,lon:35.264,zone:"valley"},{n:"גבעת אלה",lat:32.741,lon:35.199,zone:"valley"},
+  {n:"בית לחם הגלילית",lat:32.750,lon:35.183,zone:"valley"},{n:"כפר תבור",lat:32.687,lon:35.418,zone:"galilee"},
+  {n:"יבנאל",lat:32.737,lon:35.467,zone:"galilee"},{n:"בית קשת",lat:32.736,lon:35.500,zone:"galilee"},
+  {n:"גינוסר",lat:32.849,lon:35.524,zone:"jordan"},{n:"מגדל",lat:32.832,lon:35.514,zone:"jordan"},
+  {n:"מצפה",lat:32.769,lon:35.486,zone:"galilee"},{n:"בית ירח",lat:32.722,lon:35.546,zone:"jordan"},
+  {n:"כינרת",lat:32.730,lon:35.549,zone:"jordan"},{n:"דגניה א",lat:32.706,lon:35.564,zone:"jordan"},
+  {n:"דגניה ב",lat:32.700,lon:35.571,zone:"jordan"},{n:"אפיקים",lat:32.684,lon:35.574,zone:"jordan"},
+  {n:"גשר",lat:32.640,lon:35.566,zone:"jordan"},{n:"בלפוריה",lat:32.617,lon:35.308,zone:"valley"},
+  {n:"תל עדשים",lat:32.648,lon:35.327,zone:"valley"},{n:"מרחביה",lat:32.601,lon:35.317,zone:"valley"},
+  {n:"גבע",lat:32.588,lon:35.354,zone:"valley"},{n:"עין חרוד",lat:32.557,lon:35.389,zone:"valley"},
+  {n:"תל יוסף",lat:32.554,lon:35.397,zone:"valley"},{n:"גבעת השלושה",lat:32.555,lon:35.434,zone:"valley"},
+  {n:"בית אלפא",lat:32.517,lon:35.421,zone:"valley"},{n:"חפציבה",lat:32.520,lon:35.414,zone:"valley"},
+  {n:"ניר דוד",lat:32.519,lon:35.443,zone:"valley"},{n:"בית השיטה",lat:32.529,lon:35.457,zone:"valley"},
+  {n:"רשפון",lat:32.192,lon:34.827,zone:"coast"},
+  // עמק הירדן
+  {n:"טבריה",lat:32.794,lon:35.531,zone:"jordan"},{n:"צמח",lat:32.714,lon:35.595,zone:"jordan"},
+  {n:"מעוז חיים",lat:32.479,lon:35.534,zone:"jordan"},{n:"בית יוסף",lat:32.474,lon:35.524,zone:"jordan"},
+  {n:"נירה",lat:32.461,lon:35.520,zone:"jordan"},{n:"מסילות",lat:32.461,lon:35.507,zone:"jordan"},
+  {n:"גשר",lat:32.640,lon:35.566,zone:"jordan"},{n:"כפר רופין",lat:32.459,lon:35.556,zone:"jordan"},
+  {n:"אשדות יעקב",lat:32.660,lon:35.579,zone:"jordan"},
+  // עמק בית שאן
+  {n:"בית שאן",lat:32.497,lon:35.499,zone:"jordan"},{n:"נווה אור",lat:32.463,lon:35.480,zone:"jordan"},
+  {n:"טירת צבי",lat:32.422,lon:35.527,zone:"jordan"},{n:"עין הנציב",lat:32.402,lon:35.502,zone:"jordan"},
+  {n:"כפר גלעדי",lat:33.245,lon:35.570,zone:"galilee"},
+  // חיפה והכרמל
+  {n:"חיפה",lat:32.794,lon:34.989,zone:"coast"},{n:"קריית ביאליק",lat:32.832,lon:35.077,zone:"coast"},
+  {n:"קריית מוצקין",lat:32.836,lon:35.074,zone:"coast"},{n:"קריית ים",lat:32.848,lon:35.067,zone:"coast"},
+  {n:"קריית אתא",lat:32.800,lon:35.104,zone:"coast"},{n:"טירת כרמל",lat:32.760,lon:34.971,zone:"coast"},
+  {n:"נשר",lat:32.775,lon:35.035,zone:"coast"},{n:"עתלית",lat:32.694,lon:34.943,zone:"coast"},
+  {n:"זכרון יעקב",lat:32.576,lon:34.952,zone:"coast"},{n:"פרדס חנה-כרכור",lat:32.472,lon:34.968,zone:"coast"},
+  {n:"בנימינה",lat:32.529,lon:34.948,zone:"coast"},{n:"גבעת עדה",lat:32.510,lon:34.964,zone:"coast"},
+  {n:"אור עקיבא",lat:32.505,lon:34.917,zone:"coast"},{n:"קיסריה",lat:32.501,lon:34.899,zone:"coast"},
+  {n:"עין הוד",lat:32.709,lon:34.978,zone:"coast"},{n:"ניר עציון",lat:32.703,lon:34.970,zone:"coast"},
+  {n:"עמיקם",lat:32.540,lon:34.982,zone:"coast"},{n:"גבעת נילי",lat:32.491,lon:34.983,zone:"coast"},
+  {n:"מעגן מיכאל",lat:32.560,lon:34.905,zone:"coast"},{n:"כפר גלים",lat:32.738,lon:34.958,zone:"coast"},
+  // שרון
+  {n:"נתניה",lat:32.329,lon:34.860,zone:"coast"},{n:"הרצליה",lat:32.165,lon:34.843,zone:"coast"},
+  {n:"רמת השרון",lat:32.146,lon:34.839,zone:"coast"},{n:"כפר סבא",lat:32.175,lon:34.907,zone:"inland"},
+  {n:"רעננה",lat:32.184,lon:34.871,zone:"inland"},{n:"הוד השרון",lat:32.150,lon:34.888,zone:"inland"},
+  {n:"חדרה",lat:32.434,lon:34.919,zone:"coast"},{n:"טול כרם",lat:32.310,lon:35.028,zone:"inland"},
+  {n:"עמנואל",lat:32.152,lon:35.133,zone:"inland"},{n:"קלנסווה",lat:32.283,lon:34.982,zone:"inland"},
+  {n:"טייבה",lat:32.268,lon:35.001,zone:"inland"},{n:"כפר קאסם",lat:32.114,lon:34.977,zone:"inland"},
+  {n:"ג׳לג׳וליה",lat:32.152,lon:34.957,zone:"inland"},{n:"רמות השבים",lat:32.215,lon:34.897,zone:"inland"},
+  {n:"כוכב יאיר",lat:32.204,lon:34.980,zone:"inland"},{n:"צור יגאל",lat:32.209,lon:34.971,zone:"inland"},
+  {n:"אבן יהודה",lat:32.270,lon:34.888,zone:"coast"},{n:"תל מונד",lat:32.258,lon:34.924,zone:"inland"},
+  {n:"עין שמר",lat:32.473,lon:34.987,zone:"coast"},{n:"בת חפר",lat:32.391,lon:34.917,zone:"coast"},
+  {n:"חרוצים",lat:32.298,lon:34.867,zone:"coast"},{n:"בורגתה",lat:32.315,lon:34.895,zone:"coast"},
+  {n:"שפיים",lat:32.195,lon:34.816,zone:"coast"},{n:"הוד השרון",lat:32.150,lon:34.888,zone:"inland"},
+  // גוש דן ותל אביב
+  {n:"תל אביב",lat:32.087,lon:34.787,zone:"coast"},{n:"רמת גן",lat:32.081,lon:34.813,zone:"inland"},
+  {n:"גבעתיים",lat:32.068,lon:34.813,zone:"inland"},{n:"בני ברק",lat:32.084,lon:34.833,zone:"inland"},
+  {n:"פתח תקווה",lat:32.087,lon:34.888,zone:"inland"},{n:"חולון",lat:32.011,lon:34.779,zone:"coast"},
+  {n:"בת ים",lat:32.022,lon:34.750,zone:"coast"},{n:"גבעת שמואל",lat:32.081,lon:34.850,zone:"inland"},
+  {n:"קריית אונו",lat:32.056,lon:34.857,zone:"inland"},{n:"אור יהודה",lat:32.027,lon:34.856,zone:"inland"},
+  {n:"סביון",lat:32.045,lon:34.878,zone:"inland"},{n:"אזור",lat:32.023,lon:34.818,zone:"inland"},
+  {n:"יהוד-מונוסון",lat:31.994,lon:34.881,zone:"inland"},{n:"קדימה-צורן",lat:32.270,lon:34.913,zone:"coast"},
+  {n:"אלעד",lat:32.053,lon:34.952,zone:"inland"},{n:"ראש העין",lat:32.095,lon:34.958,zone:"inland"},
+  {n:"פתח תקווה",lat:32.087,lon:34.888,zone:"inland"},
+  // שפלה ומרכז
+  {n:"ראשון לציון",lat:31.964,lon:34.804,zone:"coast"},{n:"נס ציונה",lat:31.925,lon:34.798,zone:"inland"},
+  {n:"רחובות",lat:31.895,lon:34.813,zone:"inland"},{n:"לוד",lat:31.952,lon:34.895,zone:"inland"},
+  {n:"רמלה",lat:31.928,lon:34.873,zone:"inland"},{n:"מודיעין",lat:31.898,lon:35.010,zone:"inland"},
+  {n:"באר יעקב",lat:31.943,lon:34.835,zone:"inland"},{n:"גדרה",lat:31.812,lon:34.782,zone:"inland"},
+  {n:"יבנה",lat:31.876,lon:34.743,zone:"coast"},{n:"נס הרים",lat:31.793,lon:35.002,zone:"mountain"},
+  {n:"כפר אורנים",lat:31.856,lon:35.023,zone:"mountain"},{n:"מחסיה",lat:31.778,lon:34.995,zone:"mountain"},
+  {n:"צרעה",lat:31.773,lon:34.971,zone:"mountain"},{n:"בית שמש",lat:31.747,lon:34.990,zone:"mountain"},
+  {n:"אשתאול",lat:31.779,lon:34.980,zone:"mountain"},{n:"תענך",lat:32.594,lon:35.197,zone:"valley"},
+  // ירושלים והסביבה
+  {n:"ירושלים",lat:31.769,lon:35.217,zone:"mountain"},{n:"מעלה אדומים",lat:31.772,lon:35.295,zone:"desert"},
+  {n:"מודיעין עילית",lat:31.933,lon:35.043,zone:"mountain"},{n:"ביתר עילית",lat:31.693,lon:35.117,zone:"mountain"},
+  {n:"בית שמש",lat:31.747,lon:34.990,zone:"mountain"},{n:"אבו גוש",lat:31.806,lon:35.108,zone:"mountain"},
+  {n:"מוצא עילית",lat:31.794,lon:35.160,zone:"mountain"},{n:"גבעת זאב",lat:31.862,lon:35.174,zone:"mountain"},
+  {n:"מבשרת ציון",lat:31.798,lon:35.134,zone:"mountain"},{n:"בית זית",lat:31.811,lon:35.137,zone:"mountain"},
+  {n:"עין כרם",lat:31.762,lon:35.159,zone:"mountain"},{n:"הר אדר",lat:31.828,lon:35.097,zone:"mountain"},
+  {n:"כפר עקב",lat:31.855,lon:35.218,zone:"mountain"},{n:"ענתות",lat:31.832,lon:35.280,zone:"mountain"},
+  {n:"גבעון החדשה",lat:31.852,lon:35.152,zone:"mountain"},{n:"נבי סמואל",lat:31.839,lon:35.178,zone:"mountain"},
+  {n:"בית נקופה",lat:31.838,lon:35.098,zone:"mountain"},{n:"מחמס",lat:31.881,lon:35.274,zone:"mountain"},
+  {n:"אבן ספיר",lat:31.769,lon:35.108,zone:"mountain"},{n:"בית זיד",lat:31.810,lon:35.117,zone:"mountain"},
+  // דרום
+  {n:"אשדוד",lat:31.804,lon:34.655,zone:"coast"},{n:"אשקלון",lat:31.669,lon:34.571,zone:"coast"},
+  {n:"קריית מלאכי",lat:31.732,lon:34.741,zone:"semi-arid"},{n:"קריית גת",lat:31.607,lon:34.770,zone:"semi-arid"},
+  {n:"נתיבות",lat:31.419,lon:34.591,zone:"semi-arid"},{n:"שדרות",lat:31.524,lon:34.597,zone:"semi-arid"},
+  {n:"אופקים",lat:31.313,lon:34.624,zone:"semi-arid"},{n:"רהט",lat:31.393,lon:34.752,zone:"semi-arid"},
+  {n:"ערד",lat:31.258,lon:35.214,zone:"desert"},{n:"דימונה",lat:31.067,lon:35.033,zone:"desert"},
+  {n:"ירוחם",lat:30.987,lon:34.929,zone:"desert"},{n:"מצפה רמון",lat:30.606,lon:34.801,zone:"desert"},
+  {n:"באר שבע",lat:31.252,lon:34.791,zone:"semi-arid"},{n:"אילת",lat:29.558,lon:34.952,zone:"desert"},
+  {n:"כסיפה",lat:31.206,lon:34.937,zone:"semi-arid"},{n:"לקיה",lat:31.372,lon:34.804,zone:"semi-arid"},
+  {n:"הוד השרון",lat:32.150,lon:34.888,zone:"inland"},{n:"עומר",lat:31.274,lon:34.851,zone:"semi-arid"},
+  {n:"מיתר",lat:31.328,lon:34.893,zone:"semi-arid"},{n:"להבים",lat:31.370,lon:34.822,zone:"semi-arid"},
+  {n:"ניצן",lat:31.734,lon:34.622,zone:"coast"},{n:"ניצנים",lat:31.717,lon:34.619,zone:"coast"},
+  {n:"נחל עוז",lat:31.467,lon:34.490,zone:"semi-arid"},{n:"כפר עזה",lat:31.484,lon:34.534,zone:"semi-arid"},
+  {n:"מפלסים",lat:31.470,lon:34.567,zone:"semi-arid"},{n:"עין השלושה",lat:31.245,lon:34.392,zone:"semi-arid"},
+  {n:"תלמי יוסף",lat:31.082,lon:34.355,zone:"desert"},{n:"נתיב העשרה",lat:31.557,lon:34.555,zone:"coast"},
+  {n:"גן יבנה",lat:31.793,lon:34.706,zone:"coast"},{n:"עזריקם",lat:31.748,lon:34.703,zone:"coast"},
+  {n:"גן הדרום",lat:31.771,lon:34.724,zone:"coast"},{n:"בית גמליאל",lat:31.821,lon:34.748,zone:"inland"},
+  {n:"בית עזרא",lat:31.823,lon:34.719,zone:"coast"},
+  // ערבה ונגב
+  {n:"יטבתה",lat:29.875,lon:35.063,zone:"desert"},{n:"עין יהב",lat:30.624,lon:35.192,zone:"desert"},
+  {n:"עין חצבה",lat:30.774,lon:35.237,zone:"desert"},{n:"פארן",lat:30.289,lon:35.178,zone:"desert"},
+  {n:"קטורה",lat:29.970,lon:35.059,zone:"desert"},{n:"שיטים",lat:30.882,lon:35.101,zone:"desert"},
+  {n:"נאות הכיכר",lat:30.922,lon:35.380,zone:"desert"},{n:"עין תמר",lat:31.026,lon:35.373,zone:"desert"},
+  {n:"צוקים",lat:31.707,lon:35.450,zone:"desert"},
+  // עמק הערבה
+  {n:"ספיר",lat:30.241,lon:35.149,zone:"desert"},{n:"גרופית",lat:29.821,lon:35.011,zone:"desert"},
+  {n:"חצבה",lat:30.774,lon:35.237,zone:"desert"},{n:"עידן",lat:30.740,lon:35.217,zone:"desert"},
+  // נגב מערבי
+  {n:"מכחול",lat:31.149,lon:34.480,zone:"desert"},{n:"רביבים",lat:30.946,lon:34.747,zone:"desert"},
+  {n:"ניצנה",lat:30.875,lon:34.449,zone:"desert"},{n:"עבדת",lat:30.790,lon:34.772,zone:"desert"},
+  {n:"שבטה",lat:30.878,lon:34.625,zone:"desert"},
+  // ים המלח ובקעת הירדן
+  {n:"קליה",lat:31.724,lon:35.453,zone:"desert"},{n:"בית הערבה",lat:31.758,lon:35.452,zone:"desert"},
+  {n:"עין גדי",lat:31.462,lon:35.388,zone:"desert"},{n:"מצוקי דרגות",lat:31.542,lon:35.416,zone:"desert"},
+  {n:"מסעדה",lat:33.248,lon:35.773,zone:"galilee"},
+  // בקעת הירדן
+  {n:"ארגמן",lat:32.113,lon:35.497,zone:"jordan"},{n:"ייטב",lat:32.054,lon:35.494,zone:"jordan"},
+  {n:"גיתית",lat:32.005,lon:35.461,zone:"jordan"},{n:"חמדת",lat:32.183,lon:35.514,zone:"jordan"},
+  {n:"מחולה",lat:32.348,lon:35.527,zone:"jordan"},{n:"שדמות מחולה",lat:32.372,lon:35.534,zone:"jordan"},
+  {n:"מסוע",lat:32.242,lon:35.543,zone:"jordan"},{n:"בקעות",lat:32.143,lon:35.483,zone:"jordan"},
+  {n:"נערן",lat:31.877,lon:35.451,zone:"jordan"},{n:"גלגל",lat:31.893,lon:35.450,zone:"jordan"},
+  {n:"יפית",lat:32.013,lon:35.473,zone:"jordan"},
+  // עמק חפר ושרון דרומי
+  {n:"אלישמע",lat:32.253,lon:34.889,zone:"coast"},{n:"שדה ורבורג",lat:32.356,lon:34.914,zone:"coast"},
+  {n:"עין ורד",lat:32.278,lon:34.930,zone:"coast"},{n:"גאולים",lat:32.384,lon:34.930,zone:"coast"},
+  {n:"מישר",lat:32.334,lon:34.937,zone:"coast"},{n:"אביחיל",lat:32.357,lon:34.880,zone:"coast"},
+  {n:"עמיחי",lat:31.987,lon:35.254,zone:"mountain"},
+  // שפלת יהודה
+  {n:"בית נחמיה",lat:31.902,lon:34.963,zone:"mountain"},{n:"חרות",lat:32.062,lon:34.948,zone:"inland"},
+  {n:"כפר בן נון",lat:31.843,lon:34.938,zone:"mountain"},{n:"עמינדב",lat:31.737,lon:35.012,zone:"mountain"},
+  {n:"צפריר",lat:31.685,lon:34.893,zone:"semi-arid"},{n:"נחם",lat:31.727,lon:34.967,zone:"mountain"},
+  {n:"בית עובד",lat:31.819,lon:34.768,zone:"coast"},{n:"תימורים",lat:31.709,lon:34.784,zone:"semi-arid"},
+  {n:"שפיר",lat:31.680,lon:34.749,zone:"semi-arid"},{n:"כפר מרדכי",lat:31.815,lon:34.804,zone:"inland"},
+  {n:"גן שורק",lat:31.819,lon:34.747,zone:"coast"},{n:"כפר הנגיד",lat:31.847,lon:34.785,zone:"inland"},
+  {n:"נחלה",lat:31.835,lon:34.818,zone:"inland"},{n:"בני עטרות",lat:32.018,lon:34.932,zone:"inland"},
+  // ערים ראשיות
+  {n:"חיפה",lat:32.794,lon:34.989,zone:"coast"},{n:"ירושלים",lat:31.769,lon:35.217,zone:"mountain"},
+  {n:"תל אביב",lat:32.087,lon:34.787,zone:"coast"},{n:"באר שבע",lat:31.252,lon:34.791,zone:"semi-arid"},
+  {n:"נתניה",lat:32.329,lon:34.860,zone:"coast"},{n:"אשדוד",lat:31.804,lon:34.655,zone:"coast"},
+  {n:"פתח תקווה",lat:32.087,lon:34.888,zone:"inland"},{n:"ראשון לציון",lat:31.964,lon:34.804,zone:"coast"},
+  {n:"אשקלון",lat:31.669,lon:34.571,zone:"coast"},{n:"בני ברק",lat:32.084,lon:34.833,zone:"inland"},
+  {n:"חולון",lat:32.011,lon:34.779,zone:"coast"},{n:"בת ים",lat:32.022,lon:34.750,zone:"coast"},
+  {n:"רמת גן",lat:32.081,lon:34.813,zone:"inland"},{n:"אילת",lat:29.558,lon:34.952,zone:"desert"},
+  // ערים בינוניות
+  {n:"מודיעין",lat:31.898,lon:35.010,zone:"inland"},{n:"רחובות",lat:31.895,lon:34.813,zone:"inland"},
+  {n:"הרצליה",lat:32.165,lon:34.843,zone:"coast"},{n:"כפר סבא",lat:32.175,lon:34.907,zone:"inland"},
+  {n:"רעננה",lat:32.184,lon:34.871,zone:"inland"},{n:"לוד",lat:31.952,lon:34.895,zone:"inland"},
+  {n:"רמלה",lat:31.928,lon:34.873,zone:"inland"},{n:"נהריה",lat:33.006,lon:35.097,zone:"coast"},
+  {n:"עכו",lat:32.923,lon:35.076,zone:"coast"},{n:"כרמיאל",lat:32.919,lon:35.299,zone:"galilee"},
+  {n:"צפת",lat:32.964,lon:35.499,zone:"mountain"},{n:"טבריה",lat:32.794,lon:35.531,zone:"jordan"},
+  {n:"נצרת",lat:32.700,lon:35.303,zone:"galilee"},{n:"קריית שמונה",lat:33.207,lon:35.570,zone:"galilee"},
+  {n:"אום אל פחם",lat:32.521,lon:35.153,zone:"galilee"},{n:"סח׳נין",lat:32.867,lon:35.297,zone:"galilee"},
+  {n:"שפרעם",lat:32.807,lon:35.166,zone:"galilee"},{n:"נוף הגליל",lat:32.704,lon:35.318,zone:"galilee"},
+  {n:"ערד",lat:31.258,lon:35.214,zone:"desert"},{n:"דימונה",lat:31.067,lon:35.033,zone:"desert"},
+  {n:"מצפה רמון",lat:30.606,lon:34.801,zone:"desert"}
+];
+let sel=null;
+const ci=document.getElementById('ci'),dd=document.getElementById('dd');
+ci.addEventListener('input',()=>{
+  const q=ci.value.trim();
+  if(!q){dd.style.display='none';return;}
+  const m=CITIES.filter(c=>c.n.includes(q)).slice(0,10);
+  if(!m.length){dd.style.display='none';return;}
+  dd.innerHTML='';
+  m.forEach(c=>{
+    const d=document.createElement('div');
+    d.textContent=c.n;
+    d.onclick=()=>{sel=c;ci.value=c.n;dd.style.display='none';document.getElementById('bn').textContent=c.n;document.getElementById('badge').style.display='block';};
+    dd.appendChild(d);
+  });
+  dd.style.display='block';
+});
+document.addEventListener('click',e=>{if(!e.target.closest('#ci')&&!e.target.closest('#dd'))dd.style.display='none';});
+
+function genForecast(city,slots){
+  const now=new Date(),month=now.getMonth(),zone=city.zone;
+  const baseDayTemp={coast:[17,18,20,24,27,30,31,31,30,27,23,18],inland:[15,16,19,23,27,30,32,32,30,26,21,16],mountain:[10,11,13,18,22,25,26,26,24,20,15,11],desert:[18,20,23,28,33,37,39,38,36,31,24,19],"semi-arid":[16,17,20,25,29,33,35,35,32,28,22,17],galilee:[11,12,15,19,24,27,29,29,27,22,16,12],valley:[13,14,17,22,27,31,33,33,30,25,18,13],jordan:[15,17,20,26,31,35,37,37,34,29,21,16]};
+  const rainProb={coast:[55,50,40,20,5,0,0,0,5,20,45,55],inland:[50,45,35,15,5,0,0,0,5,15,40,50],mountain:[65,60,50,25,8,0,0,0,5,25,55,65],desert:[15,10,8,5,2,0,0,0,2,5,10,12],"semi-arid":[35,30,20,10,3,0,0,0,3,10,25,35],galilee:[60,55,45,20,6,0,0,0,5,22,50,60],valley:[45,40,30,12,4,0,0,0,4,12,35,45],jordan:[25,20,15,8,2,0,0,0,2,8,18,22]};
+  const dayT=(baseDayTemp[zone]||baseDayTemp.inland)[month];
+  const nightT=dayT-8-(zone==='desert'?4:0)-(zone==='mountain'?3:0);
+  const baseRain=(rainProb[zone]||rainProb.inland)[month];
+  const seed=(now.getDate()*7+now.getMonth()*13)%100;
+  const rainToday=Math.max(0,Math.min(100,baseRain+(seed%30)-15));
+  const rainTom=Math.max(0,Math.min(100,baseRain+((seed+17)%30)-15));
+  const baseWind=[20,22,25,18,15,10,8,8,12,18,22,20][month];
+  const todayStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  return slots.map(slot=>{
+    const h=parseInt(slot.split('T')[1]);
+    const isToday=slot.startsWith(todayStr);
+    const rb=isToday?rainToday:rainTom;
+    const tCurve=Math.sin((h-5)/24*2*Math.PI-Math.PI/2);
+    const temp=Math.round((nightT+dayT)/2+(dayT-nightT)/2*tCurve);
+    let hr=rb;
+    if(month>=10||month<=2){hr=h<8||h>20?Math.min(100,rb*1.3):rb*0.8;}
+    hr=Math.round(Math.max(0,Math.min(100,hr)));
+    let code=hr>70?63:hr>50?61:hr>30?80:hr>15?2:hr>5?1:0;
+    const wind=Math.round(baseWind*(0.7+0.6*Math.sin((h-6)/24*2*Math.PI)));
+    return{temp,rain:hr,code,wind};
+  });
+}
+function icon(w,dh){if(w===0)return dh?'☀️':'🌙';if(w<=2)return dh?'⛅':'🌤️';if(w<=3)return'☁️';if(w<=61)return'🌦️';if(w<=65)return'🌧️';if(w<=80)return'🌦️';return'⛈️';}
+function wlabel(w){if(w===0)return'שמיים בהירים';if(w<=1)return'בהיר בעיקר';if(w<=2)return'מעונן חלקית';if(w<=3)return'מעונן';if(w<=61)return'גשם קל';if(w<=65)return'גשם';if(w<=80)return'ממטרים';return'סופת רעמים';}
+function tcolor(t){if(t<10)return'#2277cc';if(t<18)return'#1a9966';if(t<26)return'#558800';if(t<32)return'#cc8800';return'#cc4400';}
+function isDH(h){return h>=6&&h<20;}
+function getRec(r,mx,mn,w){
+  if(r>70)return{t:'לא מומלץ לצאת לטבע',c:'#c00',d:'צפי לגשם כבד'};
+  if(r>40)return{t:'יציאה לטבע – עם אזהרה',c:'#b36000',d:'סיכוי לגשם, הכינו ציוד'};
+  if(mx>38)return{t:'חום קיצוני – לא מומלץ',c:'#c00',d:'מסוכן לפעילות חיצונית'};
+  if(mx>34)return{t:'חם מאוד – יזהרו',c:'#b36000',d:'שתו הרבה מים'};
+  if(mn<3)return{t:'קר מאוד – לבשו שכבות',c:'#b36000',d:'טמפרטורות נמוכות מאוד'};
+  if(w>50)return{t:'רוחות חזקות',c:'#b36000',d:'רוחות עלולות להיות מסוכנות'};
+  if(r<15&&mx<33&&mx>8)return{t:'מומלץ לצאת לטבע!',c:'#197a3e',d:'מזג אוויר נוח לטיול'};
+  return{t:'בדרך כלל נוח',c:'#555',d:'בדקו את התחזית השעתית'};
+}
+async function doFetch(){
+  if(!sel){const m=CITIES.find(c=>c.n===ci.value.trim());if(m){sel=m;document.getElementById('bn').textContent=m.n;document.getElementById('badge').style.display='block';}else{document.getElementById('out').innerHTML='<p class="err">נא לבחור ישוב מהרשימה</p>';return;}}
+  const out=document.getElementById('out');
+  const btn=document.getElementById('btn');
+  btn.disabled=true;btn.textContent='טוען...';
+  out.innerHTML='<p style="color:#666;padding:20px 0;text-align:center">⏳ מתחבר לתחזית מזג אוויר...</p>';
+
+  const now=new Date(),pad=n=>String(n).padStart(2,'0'),fmt=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const tom=new Date(now);tom.setDate(tom.getDate()+1);
+  const nowStr=`${fmt(now)}T${pad(now.getHours())}:00`,tomStr=`${fmt(tom)}T18:00`;
+
+  let slots=[], temps=[], rains=[], winds=[], codes=[], firstDate;
+
+  try {
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${sel.lat}&longitude=${sel.lon}&hourly=temperature_2m,precipitation_probability,weathercode,windspeed_10m&forecast_days=2&timezone=Asia%2FJerusalem&wind_speed_unit=kmh`;
+    const res=await fetch(url);
+    if(!res.ok) throw new Error('שגיאת שרת');
+    const data=await res.json();
+
+    const allTimes=data.hourly.time;
+    const allTemps=data.hourly.temperature_2m;
+    const allProbs=data.hourly.precipitation_probability;
+    const allCodes=data.hourly.weathercode;
+    const allWinds=data.hourly.windspeed_10m;
+
+    allTimes.forEach((t,i)=>{
+      if(t>=nowStr && t<=tomStr){
+        slots.push(t);
+        temps.push(allTemps[i]);
+        rains.push(allProbs[i]);
+        codes.push(allCodes[i]);
+        winds.push(allWinds[i]);
+      }
+    });
+    if(!slots.length) throw new Error('אין נתונים');
+    firstDate=slots[0].split('T')[0];
+    out.innerHTML='';
+  } catch(e) {
+    // Fallback to local climate model
+    out.innerHTML='<p style="color:#888;font-size:12px;padding:4px 0">⚠️ לא ניתן להתחבר לרשת – מציג תחזית אקלימית מקורבת</p>';
+    const cur=new Date(now);cur.setMinutes(0,0,0);
+    while(true){const s=`${fmt(cur)}T${pad(cur.getHours())}:00`;if(s>tomStr)break;if(s>=nowStr)slots.push(s);cur.setHours(cur.getHours()+1);}
+    const fallback=genForecast(sel,slots);
+    temps=fallback.map(d=>d.temp);
+    rains=fallback.map(d=>d.rain);
+    codes=fallback.map(d=>d.code);
+    winds=fallback.map(d=>d.wind);
+    firstDate=slots[0].split('T')[0];
+  } finally {
+    btn.disabled=false;btn.textContent='הצג תחזית';
+  }
+
+  const maxT=Math.max(...temps),minT=Math.min(...temps),maxR=Math.max(...rains),maxW=Math.max(...winds);
+  const rec=getRec(maxR,maxT,minT,maxW);
+  const curH=parseInt(slots[0].split('T')[1]);
+  let html=document.getElementById('out').innerHTML;
+  html+=`<div class="grid">
+    <div class="card"><div class="label">${icon(codes[0],isDH(curH))} כעת ב${sel.n}</div><div class="val" style="color:${tcolor(temps[0])}">${Math.round(temps[0])}°C</div><div class="sub2">${wlabel(codes[0])}</div></div>
+    <div class="card"><div class="label">טווח טמפרטורות</div><div class="val">${Math.round(minT)}°–${Math.round(maxT)}°</div><div class="sub2">מינימום – מקסימום</div></div>
+    <div class="card"><div class="label">סיכוי גשם מקסימלי</div><div class="val">${maxR}%</div><div class="sub2">רוח עד ${Math.round(maxW)} קמ"ש</div></div>
+    <div class="card"><div class="label">המלצה לטיול</div><div class="val" style="font-size:14px;color:${rec.c}">${rec.t}</div><div class="sub2">${rec.d}</div></div>
+  </div>
+  <p class="stitle">תחזית שעתית אמיתית – מעכשיו עד מחר 18:00</p>
+  <div class="timeline"><div class="tscroll">`;
+  slots.forEach((s,i)=>{
+    const hStr=s.split('T')[1].slice(0,5),dStr=s.split('T')[0],h=parseInt(s.split('T')[1]),dl=dStr===firstDate?'היום':'מחר';
+    html+=`<div class="hcard${i===0?' now':''}"><div class="ht">${hStr}</div><div class="hd">${dl}</div><div class="hi">${icon(codes[i],isDH(h))}</div><div class="htemp" style="color:${tcolor(temps[i])}">${Math.round(temps[i])}°</div><div class="hrain">💧${rains[i]}%</div><div class="rbar"><div class="rbf" style="width:${rains[i]}%"></div></div></div>`;
+  });
+  html+=`</div></div>`;
+  document.getElementById('out').innerHTML=html;
+}
+</script>
+</body>
+</html>
